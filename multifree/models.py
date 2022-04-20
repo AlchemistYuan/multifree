@@ -11,9 +11,9 @@ from torch import optim
 from torch.utils import data
 from torch.nn import functional as F
 
-from utils import *
-from coor_transform import *
-from loss import *
+from .utils import *
+from .coor_transform import *
+from .loss import *
 
 
 class Encoder(nn.Module):

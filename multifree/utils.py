@@ -7,7 +7,7 @@ import MDAnalysis as mda
 import numpy as np
 import matplotlib.pyplot as plt
 
-from distributions import *
+from .distributions import *
 
 
 def read_inputs() -> argparse.Namespace:
