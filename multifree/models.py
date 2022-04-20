@@ -3,7 +3,6 @@ import MDAnalysis as mda
 
 
 import torch
-import torchvision
 from torchvision.transforms import ToTensor
 import torchvision.transforms as T
 from torch import nn
