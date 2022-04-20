@@ -8,6 +8,12 @@ from torch import nn
 from torch.utils import data
 
 
+__all__ = [
+    "GaussianMixtureBase", "GaussianMixture1D", "GaussianMixture2D", 
+    "histogram_1d", "histogram_2d", "create_gaussian_mixtures_2d_prior"
+]
+
+
 def histogram_1d(data, nbins=50, density=True):
     hist, xedges = np.histogram(data, bins=nbins, density=density)
     x = (xedges[:-1] + xedges[1:]) / 2

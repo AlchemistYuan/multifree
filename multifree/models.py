@@ -16,6 +16,13 @@ from .coor_transform import *
 from .loss import *
 
 
+__all__ = [
+    "Encoder", "Decoder", "AutoencoderBase", "DeterministicAutoencoder",
+    "VariationalEncoder", "VAE", "Discriminator",
+    "AAE", "SemiSupervisedAAE", "XYZDihderalAAE", "XYZDihderalSSAAE"  
+]
+
+
 class Encoder(nn.Module):
     """
     Define a deterministic encoder.
