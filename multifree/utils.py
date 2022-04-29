@@ -36,7 +36,7 @@ def read_inputs() -> argparse.Namespace:
     parser.add_argument('--outdir', dest='outdir', help='Output directory', default='./')
     parser.add_argument('--traindata', dest='traindata', help='Training dataset')
     parser.add_argument('--label', dest='label', help='Labels for training data')
-    parser.add_argument('--activation', dest='activ', help='Activation function', default='relu')
+    parser.add_argument('--activation', dest='activation', help='Activation function', default='relu')
     parser.add_argument('--latent', dest='latent', help='Latent space dimension', default=2, type=int)
     parser.add_argument('--infeatures', dest='infeatures', help='Encoder input feature dimension', type=int)
     parser.add_argument('--outfeatures', dest='outfeatures', help='Decoder output feature dimension', type=int)

@@ -471,7 +471,6 @@ class Discriminator(nn.Module):
             
         for i in range(len(discriminator_hidden_dims)):
             modules.append(nn.Sequential(nn.Linear(in_features, discriminator_hidden_dims[i]),
-                                         nn.BatchNorm1d(discriminator_hidden_dims[i]),
                                          self.activation))
             in_features = discriminator_hidden_dims[i]
         modules.append(nn.Sequential(nn.Linear(in_features, 1),))
