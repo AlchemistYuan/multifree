@@ -471,6 +471,7 @@ class Discriminator(nn.Module):
             
         for i in range(len(discriminator_hidden_dims)):
             modules.append(nn.Sequential(nn.Linear(in_features, discriminator_hidden_dims[i]),
+                                         nn.BatchNorm1d(discriminator_hidden_dims[i]),
                                          self.activation))
             in_features = discriminator_hidden_dims[i]
         modules.append(nn.Sequential(nn.Linear(in_features, 1),))
@@ -556,7 +557,10 @@ class AAE(nn.Module):
     def train_discriminator(self, z: torch.Tensor, noise: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         target_real = self.discriminator(noise)
         target_generator = self.discriminator(z.detach())
-        return target_real, target_generator
+        real_loss = self.criterion_D(target_real, self.z_real)
+        fake_loss = self.criterion_D(target_generator, self.z_fake)
+        loss_d = 0.5 * (real_loss + fake_loss)
+        return target_real, target_generator, loss_d
     
     def sample(self, nsample: int=100, z: torch.Tensor=None) -> torch.Tensor:
         if self.variational:
@@ -647,10 +651,7 @@ class AAE(nn.Module):
         # Train the discriminator
         noise = self.true_prior.sample(sample_shape=torch.tensor([self.params['batchsize'], 
                                        self.params['latent']])).to(self.params['device'])
-        target_real, target_generator = self.train_discriminator(z, noise)
-        real_loss = self.criterion_D(target_real, self.z_real)
-        fake_loss = self.criterion_D(target_generator, self.z_fake)
-        loss_d = 0.5 * (real_loss + fake_loss)
+        target_real, target_generator, loss_d = self.train_discriminator(z, noise)
         self.optim_D.zero_grad()
         loss_d.backward()
         self.optim_D.step()
@@ -728,15 +729,59 @@ class SemiSupervisedAAE(AAE):
                                                             self.params['latent']]), 
                                                             return_components=True)
         noise_label_batch = torch.cat((noise, noise_one_hot_label), dim=1)
-        target_real, target_generator = self.train_discriminator(z_label_batch, noise_label_batch)
-        real_loss = self.criterion_D(target_real, self.z_real)
-        fake_loss = self.criterion_D(target_generator, self.z_fake)
-        loss_d = 0.5 * (real_loss + fake_loss)
+        target_real, target_generator, loss_d = self.train_discriminator(z_label_batch, noise_label_batch)
         self.optim_D.zero_grad()
         loss_d.backward()
         self.optim_D.step()        
         return loss_g_dict, loss_d
-    
+
+class SemiSupervisedAAEwithGP(AAE):
+    """
+    Define a semi-supervised adversarial autoencoder with gradient penalty on distriminator loss. 
+    Label information is incorporated with latent codes for the discriminator.
+
+    Attributes
+    ----------
+         
+    """
+    def __init__(self, params: dict, generator: nn.Module, discriminator: nn.Module,
+                 optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
+                 PCAWhitening: nn.Module=None, PCAUnWhitening: nn.Module=None, whitened_loss=True,
+                 variational: bool=False, whitening: bool=True, verbose: bool=True) -> None:
+        super(SemiSupervisedAAEwithGP, self).__init__(params, generator, discriminator,
+                                                optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
+                                                PCAWhitening, PCAUnWhitening, whitened_loss,
+                                                variational, whitening, verbose)
+
+    def _gradient_penalty(z: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the gradient penalty term.
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            The generated latent variables
+        noise : torch.Tensor
+            The true latent variables
+
+        Returns
+        -------
+        gp : torch.Tensor
+            The computed gradient penalty
+        """
+        eps = torch.rand(z.shape[0], z.shape[1])
+        z_bar = eps * noise + (1 - eps) * z
+        target_z_bar = self.discriminator(z_bar)
+
+        return gp
+
+    def train_discriminator(self, z: torch.Tensor, noise: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        gp = self._gradient_penalty(z, noise)
+        target_real = self.discriminator(noise)
+        target_generator = self.discriminator(z.detach())
+        loss_d = torch.mean(target_generator) - torch.mean(target_real) + self.gpfactor * gp
+        return target_real, target_generator, loss_d
+ 
 class XYZDihderalAAE(AAE):
     """
     The XYZDihderalAAE model takes xyz coordinates and phi/psi dihedrals as input.
@@ -806,12 +851,7 @@ class XYZDihderalAAE(AAE):
         # Train the discriminator
         noise = self.true_prior.sample(sample_shape=torch.tensor([self.params['batchsize'], 
                                        self.params['latent']])).to(self.params['device'])
-        target_real, target_generator = self.train_discriminator(z, noise)
-        
-        # Compute discriminator loss
-        real_loss = self.criterion_D(target_real, self.z_real)
-        fake_loss = self.criterion_D(target_generator, self.z_fake)
-        loss_d = 0.5 * (real_loss + fake_loss)
+        target_real, target_generator, loss_d = self.train_discriminator(z, noise)
         # Backward pass
         self.optim_D.zero_grad()
         loss_d.backward()
@@ -947,12 +987,7 @@ class XYZDihderalSSAAE(XYZDihderalAAE):
                                                             self.params['latent']]), 
                                                             return_components=True)
         noise_label_batch = torch.cat((noise, noise_one_hot_label), dim=1)
-        target_real, target_generator = self.train_discriminator(z_label_batch, noise_label_batch)
-        
-        # Compute discriminator loss
-        real_loss = self.criterion_D(target_real, self.z_real)
-        fake_loss = self.criterion_D(target_generator, self.z_fake)
-        loss_d = 0.5 * (real_loss + fake_loss)
+        target_real, target_generator, loss_d = self.train_discriminator(z_label_batch, noise_label_batch)
         # Backward pass
         self.optim_D.zero_grad()
         loss_d.backward()
