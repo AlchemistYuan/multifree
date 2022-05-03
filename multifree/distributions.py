@@ -30,11 +30,11 @@ def create_gaussian_mixtures_2d_prior(n, weights=None):
     std = torch.zeros((n,2,2))
     
     for l in range(n):
-        mean = torch.tensor([n*np.cos((l*2*np.pi)/n), n*np.sin((l*2*np.pi)/n)])
+        mean = torch.tensor([(n+0.1)*np.cos((l*2*np.pi)/n), (n+0.1)*np.sin((l*2*np.pi)/n)])
         locations[l,:] = mean
         v1 = [np.cos((l*2*np.pi)/n), np.sin((l*2*np.pi)/n)]
         v2 = [-np.sin((l*2*np.pi)/n), np.cos((l*2*np.pi)/n)]
-        a1 = 3
+        a1 = 0.95
         a2 = 1
         M =np.vstack((v1,v2)).T
         S = np.array([[a1, 0], [0, a2]])
@@ -135,3 +135,39 @@ class GaussianMixture2D(GaussianMixtureBase):
             d = D.MultivariateNormal(loc=means[i], covariance_matrix=std[i])
             components.append(d)
         return components
+
+class PotentialModelBase(nn.Module):
+    '''
+    The base class for all potential energy models.
+    '''
+
+    def potential_energy(self, x):
+        log_p = self.log_prob(x)
+        u = self.f - log_p
+        return u
+
+    def partition_function(self):
+        return torch.exp(-self.f)
+
+class DoubleWellPotential(D.MixtureSameFamily, PotentialModelBase):
+    '''
+    Implementation of a double-well potential model as a mixture of two bivariate normal distributions.
+    '''
+
+    def __init__(self, mean, std, f=3, weight=torch.tensor([0.5, 0.5])):
+        mix = D.Categorical(weight)
+        comp = D.MultivariateNormal(mean, covariance_matrix=std)
+        super().__init__(mix, comp)
+        self.f = f  # free energy
+
+    def sample(self, shape):
+        samples = super().sample(shape)
+        return samples.float()
+
+    def log_prob(self, x):
+        return super().log_prob(x)
+
+    def density(self, x):
+        log_p = self.log_prob(x)
+        p = torch.exp(log_p)
+        return p
