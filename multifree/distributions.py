@@ -30,16 +30,16 @@ def create_gaussian_mixtures_2d_prior(n, weights=None):
     std = torch.zeros((n,2,2))
     
     for l in range(n):
-        mean = torch.tensor([(n+0.1)*np.cos((l*2*np.pi)/n), (n+0.1)*np.sin((l*2*np.pi)/n)])
+        mean = 4.1 * torch.tensor([np.cos((l*2*np.pi)/n), np.sin(np.pi/4 + (l*2*np.pi)/n)])
         locations[l,:] = mean
-        v1 = [np.cos((l*2*np.pi)/n), np.sin((l*2*np.pi)/n)]
-        v2 = [-np.sin((l*2*np.pi)/n), np.cos((l*2*np.pi)/n)]
-        a1 = 0.95
-        a2 = 1
-        M =np.vstack((v1,v2)).T
-        S = np.array([[a1, 0], [0, a2]])
-        cov = torch.tensor(np.dot(np.dot(M, S), np.linalg.inv(M)))
-        std[l,:,:] = cov
+        #v1 = [np.cos((l*2*np.pi)/n), np.sin((l*2*np.pi)/n)]
+        #v2 = [-np.sin((l*2*np.pi)/n), np.cos((l*2*np.pi)/n)]
+        #a1 = 0.95
+        #a2 = 1
+        #M =np.vstack((v1,v2)).T
+        #S = np.array([[a1, 0], [0, a2]])
+        #cov = torch.tensor(np.dot(np.dot(M, S), np.linalg.inv(M)))
+        std[l,:,:] = torch.eye(2) * 5 #cov
     p = GaussianMixture2D(locations, std, weights=weights)
     return p
 
