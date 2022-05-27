@@ -180,8 +180,10 @@ class CustomDataset(data.Dataset):
     """
     Custom pytorch dataset.
     """
-    def __init__(self, data: torch.Tensor, labels: torch.Tensor=None, transform=None) -> None:
+    def __init__(self, data: torch.Tensor, targets: torch.Tensor=None,
+                 labels: torch.Tensor=None, transform=None) -> None:
         self.data = data
+        self.targets = targets
         self.labels = labels
         self.transform = transform
         self.length = data.shape[0]
@@ -190,9 +192,17 @@ class CustomDataset(data.Dataset):
         sample = self.data[index]
         if self.labels is not None:
             label = self.labels[index]
-            return sample, label
+            if self.targets is not None:
+                target = self.targets[index]
+                return sample, target, label
+            else:
+                return sample, label
         else:
-            return sample
+            if self.targets is not None:
+                target = self.targets[index]
+                return sample, target
+            else:
+                return sample
 
     def __len__(self) -> int:
         return self.length

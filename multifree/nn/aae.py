@@ -8,7 +8,7 @@ from multifree.utils.loss import *
 
 
 __all__ = [
-    "AAE", "SupervisedAAE", "XYZDihderalAAE", "XYZDihderalSAAE"  
+    "AAE", "SupervisedAAE", "EnergyGapSAAE", "XYZDihderalAAE", "XYZDihderalSAAE"  
 ]
 
 class AAE(nn.Module):
@@ -378,7 +378,81 @@ class SupervisedAAE(AAE):
         loss_d.backward()
         self.optim_D.step()        
         return loss_g_dict, loss_d
+
+class EnergyGapSAAE(SupervisedAAE):
+    """
+    A supervised aae model in which the decoder predicts the energy gap associated with each input data point.
     
+    This class is a subclass of the SupervisedAAE class and the parameters for the constructor are the same.
+    
+    The PCAUnWhitening should be always ``None`` as we don't need to perform any whitening on the energy gap data.
+    """
+    def __init__(self, params: dict, generator: nn.Module, discriminator: nn.Module,
+                 optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
+                 PCAWhitening: nn.Module=None, PCAUnWhitening: nn.Module=None, whitened_loss=True,
+                 variational: bool=False, whitening: bool=True, verbose: bool=True) -> None:
+        super(EnergyGapSAAE, self).__init__(params, generator, discriminator,
+                                            optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
+                                            PCAWhitening, PCAUnWhitening, whitened_loss,
+                                            variational, whitening, verbose)
+
+    def _train_one_step(self, j: int, train_batch) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        A private method to train one step in an epoch.
+        Overriden from the parent class. Parameters and returns are the same as the parent class.
+        
+        Parameters
+        ----------
+        j : int
+            The number of training step in an epoch
+        train_batch : list
+            The minibatch to be trained at this step and the corresponding labels
+            
+        Returns
+        -------
+        loss_g_dict : dict
+            A dictionary to store each component of the generator loss
+        loss_d : torch.Tensor
+            The discriminator loss
+        """
+        x_batch = train_batch[0].to(self.params['device'])
+        energy_batch = train_batch[1].to(self.params['device'])
+        label_batch = train_batch[2].to(self.params['device'])
+        labels_one_hot = self._label_to_one_hot_vector(label_batch).to(self.params['device'])
+        if self.whitening:
+            x = self.pcawhitening(x_batch)
+            assert x.shape[0] == x_batch.shape[0]
+            assert x.shape[1] == x_batch.shape[1] - self.params['dof']
+        else:
+            x = x_batch
+            assert x.shape == x_batch.shape
+
+        # Train the generator
+        energy_hat, generator_args = self.train_generator(x)
+        z = generator_args[0]
+        z_label_batch = torch.cat((z, labels_one_hot), dim=1)
+
+        # Compute generator loss
+        # Here the decoder outputs the energy gap so we compare the decoder learned
+        # energy gap with the real energy gap
+        loss_g_dict = self.criterion_G(energy_batch, energy_hat, generator_args[1:], self.params['beta'])
+        loss_g = 0.99 * loss_g_dict['loss'] + 0.01 * self.criterion_D(self.discriminator(z_label_batch), self.z_real)
+        # Backward pass
+        self.optim_G.zero_grad()
+        loss_g.backward()
+        self.optim_G.step()
+
+        # Train the discriminator
+        noise, noise_one_hot_label = self.true_prior.sample(sample_shape=torch.tensor([self.params['batchsize'],
+                                                            self.params['latent']]),
+                                                            return_components=True)
+        noise_label_batch = torch.cat((noise, noise_one_hot_label), dim=1)
+        target_real, target_generator, loss_d = self.train_discriminator(z_label_batch, noise_label_batch)
+        self.optim_D.zero_grad()
+        loss_d.backward()
+        self.optim_D.step()
+        return loss_g_dict, loss_d
+
 class XYZDihderalAAE(AAE):
     """
     The XYZDihderalAAE model takes xyz coordinates and phi/psi dihedrals as input.
