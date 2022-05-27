@@ -7,7 +7,7 @@ import MDAnalysis as mda
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.distributions import *
+from multifree.utils.distributions import *
 
 
 __all__ = [

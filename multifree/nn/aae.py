@@ -2,9 +2,9 @@ import torch
 from torch import nn
 from torch import optim
 
-from utils.utils import *
-from utils.coor_transform import *
-from utils.loss import *
+from multifree.utils.utils import *
+from multifree.utils.coor_transform import *
+from multifree.utils.loss import *
 
 
 __all__ = [
@@ -99,7 +99,7 @@ class AAE(nn.Module):
         
         Parameters
         ----------
-        x_batch : torch.data.Dataset
+        x_batch : torch.utils.data.Dataset
             The minibatch to be trained
             
         Returns
@@ -164,15 +164,15 @@ class AAE(nn.Module):
             samples = self.pcaunwhitening(samples)
         return samples
     
-    def forward(self, train_data: torch.data.Dataloader, val_data: torch.data.Dataloader=None) -> None:
+    def forward(self, train_data: torch.utils.data.DataLoader, val_data: torch.utils.data.DataLoader=None) -> None:
         """
         The forward pass of the AAE model.
         
         Parameters
         ----------
-        train_data : torch.data.Dataloader
+        train_data : torch.utils.data.DataLoader
             A dataloader for the training dataset
-        val_data : torch.data.Dataloader
+        val_data : torch.utils.data.DataLoader
             A dataloader for the validation dataset
             
         Returns
@@ -182,7 +182,7 @@ class AAE(nn.Module):
         for i in range(self.params['nepoch']):
             self._train_one_epoch(i, train_data, val_data)
     
-    def _train_one_epoch(self, i: int, train_data: torch.data.Dataloader, val_data: torch.data.Dataloader=None) -> None:
+    def _train_one_epoch(self, i: int, train_data: torch.utils.data.DataLoader, val_data: torch.utils.data.DataLoader=None) -> None:
         """
         A private method to train one epoch of all training data.
         
@@ -190,9 +190,9 @@ class AAE(nn.Module):
         ----------
         i : int
             The number of the current epoch
-        train_data : torch.data.Dataloader
+        train_data : torch.utils.data.DataLoader
             A dataloader for the training dataset
-        val_data : torch.data.Dataloader, default=None
+        val_data : torch.utils.data.DataLoader, default=None
             A dataloader for the validation dataset
             
         Returns

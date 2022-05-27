@@ -70,7 +70,7 @@ def histogram_2d(data_x: np.ndarray, data_y: np.ndarray,
     y = (yedges[:-1] + yedges[1:]) / 2
     return hist, x, y
 
-def create_gaussian_mixtures_2d_prior(n: int, weights: list) -> D.Distribution:
+def create_gaussian_mixtures_2d_prior(n: int, weights: torch.Tensor) -> D.Distribution:
     """
     Create a 2d mixture of gaussian distributions as the prior distribution.
     
@@ -239,7 +239,8 @@ class GaussianMixture1D(GaussianMixtureBase):
     """
     def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor=None) -> None:
         super(GaussianMixture1D, self).__init__(means, std, weights)
-        
+        self.ndim = 1
+     
     def _prepare_components(self, means: torch.Tensor, std: torch.Tensor) -> list:
         components = []
         for i in range(self.ncomponents):
@@ -254,7 +255,8 @@ class GaussianMixture2D(GaussianMixtureBase):
     """
     def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor=None) -> None:
         super(GaussianMixture2D, self).__init__(means, std, weights)
-    
+        self.ndim = 2
+ 
     def _prepare_components(self, means: torch.Tensor, std: torch.Tensor) -> list:
         components = []
         for i in range(self.ncomponents):

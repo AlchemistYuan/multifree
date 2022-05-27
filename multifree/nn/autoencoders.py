@@ -4,9 +4,9 @@ import torch
 from torch import nn
 from torch import optim
 
-from utils.utils import *
-from utils.coor_transform import *
-from utils.loss import *
+from multifree.utils.utils import *
+from multifree.utils.coor_transform import *
+from multifree.utils.loss import *
 
 
 class Encoder(nn.Module):

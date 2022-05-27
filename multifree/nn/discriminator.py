@@ -2,8 +2,8 @@ import torch
 from torch import nn
 from torch import optim
 
-from utils.coor_transform import *
-from utils.loss import *
+from multifree.utils.coor_transform import *
+from multifree.utils.loss import *
 
 
 __all__ = ['Discriminator']
