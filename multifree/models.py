@@ -1,18 +1,12 @@
-import numpy as np
-import MDAnalysis as mda
-
+from typing import Union
 
 import torch
-from torchvision.transforms import ToTensor
-import torchvision.transforms as T
 from torch import nn
 from torch import optim
-from torch.utils import data
-from torch.nn import functional as F
 
-from .utils import *
-from .coor_transform import *
-from .loss import *
+from utils import *
+from coor_transform import *
+from loss import *
 
 
 __all__ = [
@@ -25,8 +19,21 @@ __all__ = [
 class Encoder(nn.Module):
     """
     Define a deterministic encoder.
+    
+    Parameters
+    ----------
+    activation : str, default='relu'
+        The activation function
+    in_features : int, default=100
+        The dimension of the input features
+    latent_dim : int, default=2
+        The dimension of the latent space
+    hidden_dims : list, default=None
+        The list of the dimensions of each hidden layer
+    batchnorm : bool, default=False
+        Whether to use batch normalization before each activation function
     """
-    def __init__(self, activation: str='relu', in_features: int=100, latent_dim: int=2, hidden_dims: list=None) -> None:
+    def __init__(self, activation: str='relu', in_features: int=100, latent_dim: int=2, hidden_dims: list=None, batchnorm: bool=False) -> None:
         super(Encoder, self).__init__()
         self.hidden_dims = hidden_dims
         if activation == 'relu':
@@ -42,7 +49,7 @@ class Encoder(nn.Module):
             
         self.in_features = in_features
         self.latent = latent_dim
-        
+        self.batchnorm = batchnorm 
         if hidden_dims is None:
             self.hidden_dims = [512, 256, 128]
         else:
@@ -53,12 +60,30 @@ class Encoder(nn.Module):
     def _encoder(self, activation, in_features: int=100, hidden_dims: list=None) -> nn.Module:
         """
         A private method to build the encoder model.
+        
+        Parameters
+        ----------
+        activation : nn.Module
+            The activation function
+        in_features : int, default=100
+            The dimension of the input features
+        hidden_dims : list, default=None
+            The list of the dimensions of each hidden layer
+        
+        Returns
+        -------
+        encoder : nn.Module
+            The encoder model
         """
         modules = []
         for i in range(len(hidden_dims)):
-            modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
-                                         nn.BatchNorm1d(hidden_dims[i]),
-                                         activation))
+            if self.batchnorm:
+                modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
+                                             nn.BatchNorm1d(hidden_dims[i]),
+                                             activation))
+            else:
+                modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
+                                             activation))
             in_features = hidden_dims[i]
         encoder = nn.Sequential(*modules)
         return encoder
@@ -69,12 +94,12 @@ class Encoder(nn.Module):
         
         Parameters
         ----------
-        input: torch.Tensor
+        x: torch.Tensor
             Input data to encoder with shape (batchsize, nfeatures)
             
         Returns
         -------
-        z: list of torch.Tensor
+        z: torch.Tensor
             The latent space codes with shape (batchsize, latent)
         """
         z = self.fc1(self.encoder(x))
@@ -83,16 +108,29 @@ class Encoder(nn.Module):
 class VariationalEncoder(Encoder):
     """
     Define a variational encoder.
+    
+    Parameters
+    ----------
+    activation : str, default='relu'
+        The activation function
+    in_features : int, default=100
+        The dimension of the input features
+    latent_dim : int, default=2
+        The dimension of the latent space
+    hidden_dims : list, default=None
+        The list of the dimensions of each hidden layer
+    batchnorm : bool, default=False
+        Whether to use batch normalization before each activation function
     """
-    def __init__(self, activation: str='relu', in_features: int=100, latent: int=2, hidden_dims: list=None) -> None:
-        super(VariationalEncoder, self).__init__(activation, in_features, latent, hidden_dims)
+    def __init__(self, activation: str='relu', in_features: int=100, latent: int=2, hidden_dims: list=None, batchnorm: bool=False) -> None:
+        super(VariationalEncoder, self).__init__(activation, in_features, latent, hidden_dims, batchnorm)
         
         self.encoder = self._encoder(self.activation, in_features=self.in_features, hidden_dims=self.hidden_dims)
         self.fc2 = nn.Linear(self.hidden_dims[-1], self.latent) 
     
     def reparameterize(self, mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
         """
-        Reparameterization trick to sample from N(mu, var) from N(0,1).
+        Reparameterization trick to sample N(mu, var) from N(0,1).
         
         Parameters
         ----------
@@ -111,7 +149,7 @@ class VariationalEncoder(Encoder):
         z = q.rsample()
         return z
     
-    def forward(self, x: torch.Tensor) -> list:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         The forward pass of the VAE model.
         
@@ -122,7 +160,12 @@ class VariationalEncoder(Encoder):
             
         Returns
         -------
-        
+        z: torch.Tensor
+            The latent space variables with shape (batchsize, latent)
+        mu: torch.Tensor 
+            Mean of the latent Gaussian with shape (batchsize, latent)
+        log_var: torch.Tensor 
+            Standard deviation of the latent Gaussian with shape (batchsize, latent)
         """
         params = self.encoder(x)
         mu = self.fc1(params)
@@ -133,9 +176,25 @@ class VariationalEncoder(Encoder):
 class Decoder(nn.Module):
     """
     Define a dencoder.
+    
+    Parameters
+    ----------
+    activation : str, default='relu'
+        The activation function
+    decoder_final_layer : str, default='linear'
+        The activation function of the final layer of the decoder
+    out_features : int, default=100
+        The dimension of the output features
+    latent_dim : int, default=2
+        The dimension of the latent space
+    hidden_dims : list, default=None
+        The list of the dimensions of each hidden layer
+    batchnorm : bool, default=False
+        Whether to use batch normalization before each activation function
     """
     def __init__(self, activation: str='relu', decoder_final_layer: str='linear',
-                 out_features: int=100, latent_dim: int=2, hidden_dims: list=None) -> None:
+                 out_features: int=100, latent_dim: int=2, 
+                 hidden_dims: list=None, batchnorm: bool=False) -> None:
         super(Decoder, self).__init__()
         self.hidden_dims = hidden_dims
         if activation == 'relu':
@@ -152,7 +211,7 @@ class Decoder(nn.Module):
         self.out_features = out_features
         self.latent = latent_dim
         self.decoder_final_layer = decoder_final_layer
-        
+        self.batchnorm = batchnorm 
         if hidden_dims is None:
             self.hidden_dims = [512, 256, 128]
         else:
@@ -182,13 +241,35 @@ class Decoder(nn.Module):
                  out_features: int=100, latent: int=2, hidden_dims: list=None) -> nn.Module:
         """
         A private method to build the decoder model.
+        
+        Parameters
+        ----------
+        activation : str
+            The activation function
+        decoder_final_layer : str, default='linear'
+            The activation function of the final layer of the decoder
+        out_features : int, default=100
+            The dimension of the output features
+        latent_dim : int, default=2
+            The dimension of the latent space
+        hidden_dims : list, default=None
+            The list of the dimensions of each hidden layer
+            
+        Returns
+        -------
+        decoder : nn.Module
+            The decoder model
         """
         modules = [nn.Linear(latent, hidden_dims[0])]
         in_features = hidden_dims[0]
         for i in range(1,len(hidden_dims)):
-            modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
-                                     nn.BatchNorm1d(hidden_dims[i]),
-                                     activation))
+            if self.batchnorm:
+                modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
+                                             nn.BatchNorm1d(hidden_dims[i]),
+                                             activation))
+            else:
+                modules.append(nn.Sequential(nn.Linear(in_features, hidden_dims[i]),
+                                             activation))
             in_features = hidden_dims[i]
         if final_layer == 'sigmoid':
             modules.append(nn.Sequential(nn.Linear(in_features, out_features),nn.Sigmoid()))
@@ -208,13 +289,11 @@ class AutoencoderBase(nn.Module):
     """
     Base class for all autoencoder model.
     
-    ...
-
-    Attributes
+    Parameters
     ----------
-    encoder : torch.nn.Module object
+    encoder : nn.Module
         The encoder model
-    deoder : torch.nn.Module object
+    decoder : nn.Module
         The decoder model
     """
     def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
@@ -224,7 +303,16 @@ class AutoencoderBase(nn.Module):
         self._weight_initialization(self.encoder.encoder)
         self._weight_initialization(self.decoder.decoder)
         
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    def encode(self, x: torch.Tensor) -> Union[torch.Tensor, tuple]:
+        """
+        Map the input data into the latent space.
+        This method will be overriden in subclasses.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input data           
+        """
         raise NotImplementedError
         
     def decode(self, z: torch.Tensor) -> torch.Tensor:
@@ -244,7 +332,16 @@ class AutoencoderBase(nn.Module):
         x_hat = self.decoder(z)
         return x_hat
         
-    def forward(self, x: torch.Tensor) -> list:
+    def forward(self, x: torch.Tensor) -> tuple:
+        """
+        The forward pass of the autoencoder model.
+        This method will be overriden in subclasses.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input data           
+        """
         raise NotImplementedError
     
     def sample(self, arg: torch.Tensor) -> torch.Tensor:
@@ -267,16 +364,12 @@ class AutoencoderBase(nn.Module):
     def _sample(self, arg: torch.Tensor) -> torch.Tensor:
         """
         Sample latent space from a trained model and pass through decoder.
+        This method will be overriden in subclasses.
         
         Parameters
         ----------
         arg : torch.Tensor
             The input argument for sampling.
-            
-        Returns
-        -------
-        samples : torch.Tensor
-            The samples (nsample, nfeatures)
         """
         raise NotImplementedError
         
@@ -296,13 +389,11 @@ class DeterministicAutoencoder(AutoencoderBase):
     """
     Define a deterministic autoencoder by building the encoder and decoder models.
     
-    ...
-
-    Attributes
+    Parameters
     ----------
-    encoder : torch.nn.Module object
+    encoder : nn.Module
         The encoder model
-    deoder : torch.nn.Module object
+    decoder : nn.Module
         The decoder model
     """
     def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
@@ -311,6 +402,7 @@ class DeterministicAutoencoder(AutoencoderBase):
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode the input data x into a set of parameters.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -319,32 +411,16 @@ class DeterministicAutoencoder(AutoencoderBase):
             
         Returns
         -------
-        params: list of torch.Tensor
-            the mean and the variance of the gaussian distribution
+        z: torch.Tensor
+            The latent space variables
         """
         z = self.encoder(x)
         return z
 
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Reconstruct the input data from the latent space.
-        
-        Parameters
-        ----------
-        z: torch.Tensor
-            The latent space variable with shape (batchsize, latent)
-            
-        Returns
-        -------
-        x_hat: torch.Tensor
-            The reconstructed input data with shape (batchsize, nfeatures)
-        """
-        x_hat = self.decoder(z)
-        return x_hat
-    
-    def forward(self, x: torch.Tensor) -> list:
-        """
-        The forward pass of the VAE model.
+        The forward pass of the deterministic autoencoder model.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -353,7 +429,10 @@ class DeterministicAutoencoder(AutoencoderBase):
             
         Returns
         -------
-        
+        x_hat: torch.Tensor
+            The reconstructed input data with shape (batchsize, nfeatures)
+        z: torch.Tensor
+            The latent space variables
         """
         z = self.encode(x)
         x_hat = self.decode(z)
@@ -362,6 +441,7 @@ class DeterministicAutoencoder(AutoencoderBase):
     def _sample(self, z) -> torch.Tensor:
         """
         Sample latent space from a trained model and pass through decoder.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -376,24 +456,26 @@ class DeterministicAutoencoder(AutoencoderBase):
         samples = self.decode(z)
         return samples
 
+
 class VAE(AutoencoderBase):
     """
-    Define an variational autoencoder (VAE) by building the encoder and decoder models.
+    Define an variational autoencoder (VAE) with a gaussian prior by building the encoder and decoder models.
 
-    Attributes
+    Parameters
     ----------
-    encoder : torch.nn.Module object
-        The encoder model
-    deoder : torch.nn.Module object
+    encoder : nn.Module
+        The variational encoder model
+    decoder : nn.Module
         The decoder model
     """
     def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
         super(VAE, self).__init__(encoder, decoder)
 
     
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Encode the input data x into a set of parameters.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -402,15 +484,20 @@ class VAE(AutoencoderBase):
             
         Returns
         -------
-        params: list of torch.Tensor
-            the mean and the variance of the gaussian distribution
+        z : torch.Tensor
+            The latent space variables sampled from the gaussian prior
+        mu : torch.Tensor
+            The mean of the gaussian distribution
+        log_var : torch.Tensor
+            the log variance of the gaussian distribution
         """
         z, mu, log_var = self.encoder(x)
         return z, mu, log_var
     
-    def forward(self, x: torch.Tensor) -> list:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         The forward pass of the VAE model.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -419,7 +506,14 @@ class VAE(AutoencoderBase):
             
         Returns
         -------
-        
+        x_hat: torch.Tensor
+            The reconstructed input data with shape (batchsize, nfeatures)
+        z : torch.Tensor
+            The latent space variables sampled from the gaussian prior
+        mu : torch.Tensor
+            The mean of the gaussian distribution
+        log_var : torch.Tensor
+            the log variance of the gaussian distribution 
         """
         z, mu, log_var = self.encode(x)
         x_hat = self.decode(z)
@@ -428,6 +522,7 @@ class VAE(AutoencoderBase):
     def _sample(self, nsample) -> torch.Tensor:
         """
         Sample latent space from a trained model and pass through decoder.
+        Overriden from the parent class.
         
         Parameters
         ----------
@@ -449,15 +544,24 @@ class VAE(AutoencoderBase):
         samples = self.decode(z)
         return samples
 
+    
 class Discriminator(nn.Module):
     """
     Implementation of a discriminator for the adversarial autoencoder.
+    
+    Parameters
+    ----------
+    in_features : int, default=2
+        The dimension of the input features
+    discriminator_hidden_dims : list, default=[128,128]
+        The dimensions of the each hidden layer in the discriminator model
+    activation : str, default='relu'
+        The activation function
     """
-    def __init__(self, latent_dim: int=2, discriminator_hidden_dims: list=[128,128], 
+    def __init__(self, in_features: int=2, discriminator_hidden_dims: list=[128,128], 
                  activation='relu',) -> None:
         super(Discriminator, self).__init__()
         modules = []
-        in_features = latent_dim
         if activation == 'relu':
             self.activation = nn.ReLU()
         elif activation == 'leakyrelu':
@@ -476,21 +580,21 @@ class Discriminator(nn.Module):
         modules.append(nn.Sequential(nn.Linear(in_features, 1),))
         self.discriminator = nn.Sequential(*modules)
         
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         The forward pass of the discriminator model.
         
         Parameters
         ----------
-        z : torch.Tensor
-            The latent codes with the shape of (batchsize, latent)
+        x : torch.Tensor
+            The input data
             
         Returns
         -------
         outputs : torch.Tensor
-            The output of the discriminator, which is the probability of z coming from true distribution.
+            The output of the discriminator.
         """
-        outputs = self.discriminator(z)
+        outputs = self.discriminator(x)
         return outputs
     
 class AAE(nn.Module):
@@ -774,13 +878,13 @@ class SemiSupervisedAAEwithGP(AAE):
 
         return gp
 
-    def train_discriminator(self, z: torch.Tensor, noise: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def train_discriminator(self, z: torch.Tensor, noise: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         gp = self._gradient_penalty(z, noise)
         target_real = self.discriminator(noise)
         target_generator = self.discriminator(z.detach())
         loss_d = torch.mean(target_generator) - torch.mean(target_real) + self.gpfactor * gp
         return target_real, target_generator, loss_d
- 
+    
 class XYZDihderalAAE(AAE):
     """
     The XYZDihderalAAE model takes xyz coordinates and phi/psi dihedrals as input.

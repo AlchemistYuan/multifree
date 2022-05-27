@@ -7,7 +7,7 @@ import MDAnalysis as mda
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .distributions import *
+from utils.distributions import *
 
 
 __all__ = [
@@ -68,6 +68,18 @@ def read_inputs() -> argparse.Namespace:
     return args
 
 def default_params() -> dict:
+    """
+    This function stores default values of some model parameters.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    model_params : dict
+        The default values for some of the model parameters
+    """
     model_params = {'activation': 'relu','latent': 2, 'infeatures': None,
                     'outfeatures': None, 'hidden': [64,32], 'nepoch': 20,
                     'batchsize': 100, 'dof': 6, 'beta': 1.0, 'lr': 0.0001, 'nclass': 4,
@@ -141,7 +153,7 @@ def autoencoder2conformations(models: list, u: mda.Universe, atoms: str='all', z
                 frame = x_rec_reshaped[i,:,:]
                 prot.atoms.positions = frame
                 W.write(prot)
-               
+                
 def generate_ssaae_samples_from_checkpoint(modelfile, paramfile, sample_shape=[1000,1], 
                                            component=None, device='cuda'):
     model, optimizer_G, optimizer_D = get_xyz_dihedral_ssaae(paramfile)
