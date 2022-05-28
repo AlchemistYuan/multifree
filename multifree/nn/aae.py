@@ -79,9 +79,14 @@ class AAE(nn.Module):
         # Optimizers for the generator and the discriminator
         self.optim_G = optim_g
         self.optim_D = optim_d
-        self.scheduler_G = optim.lr_scheduler.ExponentialLR(self.optim_G, gamma=0.99)
-        self.scheduler_D = optim.lr_scheduler.ExponentialLR(self.optim_D, gamma=0.99)
-
+        if self.params['schedulerg']:
+            self.scheduler_G = optim.lr_scheduler.ExponentialLR(self.optim_G, gamma=0.99)
+        else:
+            self.scheduler_G = None
+        if self.params['schedulerd']:
+            self.scheduler_D = optim.lr_scheduler.ExponentialLR(self.optim_D, gamma=0.99)
+        else:
+            self.scheduler_D = None
         # The loss function for the generator and the discriminator
         self.criterion_G = generator_loss
         self.criterion_D = discriminator_loss
@@ -226,8 +231,10 @@ class AAE(nn.Module):
             print(report[:-1])
    
         # Update scheduler after each epoch
-        self.scheduler_G.step()
-        self.scheduler_D.step()
+        if self.scheduler_G is not None:
+            self.scheduler_G.step()
+        if self.scheduler_D is not None:
+            self.scheduler_D.step()
  
     def _train_one_step(self, j: int, train_batch) -> tuple[dict, torch.Tensor]:
         """

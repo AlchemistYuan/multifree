@@ -45,6 +45,38 @@ class RMSDLoss(nn.Module):
              loss = torch.mean(loss)
         return loss
 
+class KLLoss(nn.Module):
+    """
+    A custom Kullback-Leibler divergence loss.
+    The input and target are not the probability so a softmax function will be applied
+    before computing the loss.
+    """
+    def __init__(self, reduction: str='batchmean'):
+        super(KLLoss, self).__init__()
+        self.reduction = reduction
+        self.loss_fn = nn.KLDivLoss(reduction=reduction)
+
+    def forward(self, pred: torch.Tensor, true: torch.Tensor) -> torch.Tensor:
+        """
+        The forward pass of the loss function
+
+        Parameters
+        ----------
+        pred : torch.Tensor
+            The input data, which is the output of the NN model
+        true : torch.Tensor
+            The observation in the dataset
+
+        Returns
+        -------
+        loss : torch.Tensor
+            The loss values
+        """
+        log_pred_softmax = F.log_softmax(pred)
+        log_true_softmax = F.log_softmax(true)
+        loss = self.loss_fn(log_pred_softmax, log_true_softmax)
+        return loss
+
 class AutoencoderLoss(nn.Module):
     """
     The common API for the autoencoder loss function.
@@ -72,6 +104,8 @@ class AutoencoderLoss(nn.Module):
             self.loss_fn = RMSDLoss()
         elif loss_fn == 'gaussian':
             self.loss_fn = torch.nn.GaussianNLLLoss()
+        elif loss_fn == 'kl':
+            self.loss_fn = KLLoss()
         self.loss_fn_name = loss_fn
         
     def forward(self, x: torch.Tensor, x_hat: torch.Tensor, 

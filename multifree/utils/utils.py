@@ -47,7 +47,8 @@ def read_inputs() -> argparse.Namespace:
     parser.add_argument('--batchsize', dest='batchsize', help='Batch size', default=100, type=int)
     parser.add_argument('--dof', dest='dof', help='Translational and rotational degrees of freedom', default=6, type=int)
     parser.add_argument('--beta', dest='beta', help='Weight in the KL loss term in betaVAE', default=1.0, type=float)
-    parser.add_argument('--lr', dest='lr', help='Learning rate', default=0.00025, type=float)
+    parser.add_argument('--lrg', dest='lrg', help='Learning rate for generator', default=0.00025, type=float)
+    parser.add_argument('--lrd', dest='lrd', help='Learning rate for discriminator', default=0.0001, type=float)
     parser.add_argument('--nclass', dest='nclass', help='Number of classes in (semi-)supervised task', default=4, type=int)
     parser.add_argument('--device', dest='device', help='CUDA or CPU device', default='cuda:0')
     parser.add_argument('--dischidden', dest='dischidden', help='Dimensions of the discriminator hidden layers', nargs='+', type=int)
@@ -60,6 +61,8 @@ def read_inputs() -> argparse.Namespace:
     parser.add_argument('--kl', dest='kl', help='Whether to use variational aotuencoder', action='store_true')
     parser.add_argument('--whitening', dest='whitening', help='Whether to include a whitening layer', action='store_true')
     parser.add_argument('--whitenedloss', dest='whitenedloss', help='Whether to calaulte loss on the whitened output', action='store_true')
+    parser.add_argument('--schedulerg', dest='schedulerg', help='Whether to add lr scheduler for generator', action='store_true')
+    parser.add_argument('--schedulerd', dest='schedulerd', help='Whether to add lr scheduler for discriminator', action='store_true')
     parser.add_argument('--lossfile', dest='lossfile', help='Save loss to a file', default='./loss.txt')
     parser.add_argument('--losspng', dest='losspng', help='Plot loss and save the figure', default='./loss.png')
     parser.add_argument('--samplepng', dest='samplepng', help='Plot the generated samples and save the figure', default='./samples.png')
@@ -81,10 +84,10 @@ def default_params() -> dict:
     model_params : dict
         The default values for some of the model parameters
     """
-    model_params = {'activation': 'relu','latent': 2, 'infeatures': None,
+    model_params = {'activation': 'leakyrelu','latent': 2, 'infeatures': None,
                     'outfeatures': None, 'hidden': [64,32], 'nepoch': 20,
-                    'batchsize': 100, 'dof': 6, 'beta': 1.0, 'lr': 0.0001, 'nclass': 4,
-                    'device': 'cuda:0', 'idx': None, 'split': 4,
+                    'batchsize': 100, 'dof': 6, 'beta': 1.0, 'lrg': 0.00025, 'lrd': 0.0001, 
+                    'nclass': 4, 'device': 'cuda:0', 'idx': None, 'split': 4,
                     'dischidden': [32,16], 'disclatent': 6, 
                     'decoderfinal': 'linear', 'batchnorm': False}
     return model_params
