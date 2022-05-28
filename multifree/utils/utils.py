@@ -35,6 +35,7 @@ def read_inputs() -> argparse.Namespace:
     parser.add_argument('--indir', dest='indir', help='Dataset directory', default='./')
     parser.add_argument('--outdir', dest='outdir', help='Output directory', default='./')
     parser.add_argument('--traindata', dest='traindata', help='Training dataset')
+    parser.add_argument('--target', dest='target', help='Target dataset')
     parser.add_argument('--label', dest='label', help='Labels for training data')
     parser.add_argument('--activation', dest='activation', help='Activation function', default='relu')
     parser.add_argument('--batchnorm', dest='batchnorm', help='Whether to use batch normalization before activation', action='store_true')
