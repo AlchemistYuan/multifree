@@ -1,10 +1,3 @@
-# Some old py files
-multifree/coor_transform.py
-multifree/distributions.py
-multifree/utils_old.py
-multifree/loss.py
-multifree/models.py
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
