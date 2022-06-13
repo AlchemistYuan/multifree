@@ -13,7 +13,7 @@ from multifree.utils.distributions import *
 __all__ = [
     "CustomDataset", "read_inputs", "default_params", "plot_aae_loss", "generate_grid", 
     "train_val_split", "autoencoder2conformations", 
-    "generate_ssaae_samples_from_checkpoint"
+    "generate_ssaae_samples_from_checkpoint", "check_last_batch"
 ]
 
 
@@ -179,7 +179,33 @@ def generate_ssaae_samples_from_checkpoint(modelfile, paramfile, sample_shape=[1
         z = prior.sample(sample_shape=sample_shape).squeeze().to(device)
     samples = model.sample(z=z)
     return samples
- 
+
+def check_last_batch(data: np.ndarray, batchsize: int) -> Union[list, np.ndarray]:
+    """
+    Check if the size of the last batch is equal to the specified batchsize.
+
+    Parameters
+    ---------
+    data : np.ndarray
+        The training dataset
+    batchsize : int
+        The specified batch size during training
+
+    Returns
+    -------
+    idx : list or np.ndarray
+        The randomly chosen indices to be removed from the dataset
+        such that the size of each batch is equal to the batchsize.
+        An empty array will be returned if nothing needs to be removed. 
+    """ 
+    mod = int(data.shape[0] % batchsize)
+    if mod == 0:
+        idx = []
+    else:
+        rng = np.random.default_rng()
+        idx = rng.choice(data.shape[0], mod, replace=False)
+    return idx
+
 class CustomDataset(data.Dataset):
     """
     Custom pytorch dataset.

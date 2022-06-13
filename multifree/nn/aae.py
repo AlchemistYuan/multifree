@@ -322,10 +322,10 @@ class SupervisedAAE(AAE):
         labels_one_hot : torch.Tensor
             The tensor of one-hot vector with the shape of (batch_size, nclass)
         """
-        labels_one_hot = torch.zeros((self.params['batchsize'], self.params['nclass']), dtype=torch.int32)
+        labels_one_hot = torch.zeros((labels.shape[0], self.params['nclass']), dtype=torch.int32)
         for k, label in enumerate(labels):
             label = label.int()
-            labels_one_hot[k, label] = label
+            labels_one_hot[k, label] = 1
         return labels_one_hot
                 
     def _train_one_step(self, j: int, train_batch) -> tuple[torch.Tensor, torch.Tensor]:
@@ -403,7 +403,7 @@ class EnergyGapSAAE(SupervisedAAE):
                                             PCAWhitening, PCAUnWhitening, whitened_loss,
                                             variational, whitening, verbose)
 
-    def _train_one_step(self, j: int, train_batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def _train_one_step(self, j: int, train_batch) -> tuple[dict, torch.Tensor]:
         """
         A private method to train one step in an epoch.
         Overriden from the parent class. Parameters and returns are the same as the parent class.

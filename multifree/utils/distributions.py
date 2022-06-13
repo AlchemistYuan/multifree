@@ -10,7 +10,7 @@ from torch.utils import data
 
 __all__ = [
     "GaussianMixtureBase", "GaussianMixture1D", "GaussianMixture2D", "DoubleWellPotential",
-    "histogram_1d", "histogram_2d", "create_gaussian_mixtures_2d_prior"
+    "histogram_1d", "histogram_2d", "create_gaussian_mixtures_prior", "create_gaussian_mixtures_1d_prior", "create_gaussian_mixtures_2d_prior"
 ]
 
 
@@ -69,6 +69,57 @@ def histogram_2d(data_x: np.ndarray, data_y: np.ndarray,
     x = (xedges[:-1] + xedges[1:]) / 2
     y = (yedges[:-1] + yedges[1:]) / 2
     return hist, x, y
+
+def create_gaussian_mixtures_prior(ndim: int, n: int, weights: torch.Tensor) -> D.Distribution:
+    """
+    Create a mixture of gaussian distributions as the prior distribution.
+    
+    Parameters
+    ----------
+    ndim : int
+        The dimension of the gaussian mixture
+    n : int
+        The number of component
+    weights : torch.Tensor
+        The weights of each component. The sum of each weight should be one.
+        
+    Returns
+    -------
+    p : D.Distribution
+        The created mixture distributions
+    """
+    if ndim == 1:
+        p = create_gaussian_mixtures_1d_prior(n, weights) 
+    elif ndim == 2:
+        p = create_gaussian_mixtures_2d_prior(n, weights) 
+    else:
+        raise ValueError('Only 1D or 2D Gaussian mixture is supported now.')
+    return p
+
+def create_gaussian_mixtures_1d_prior(n: int, weights: torch.Tensor) -> D.Distribution:
+    """
+    Create a 1d mixture of gaussian distributions as the prior distribution.
+    
+    Parameters
+    ----------
+    n : int
+        The number of component
+    weights : torch.Tensor
+        The weights of each component. The sum of each weight should be one.
+        
+    Returns
+    -------
+    p : D.Distribution
+        The created mixture distributions
+    """
+    locations = torch.zeros(n)
+    std = torch.ones(n) * 2.
+
+    for l in range(n):
+        mean = 5 * np.cos((l*2*np.pi)/n)
+        locations[l] = mean
+    p = GaussianMixture1D(locations, std, weights=weights)
+    return p
 
 def create_gaussian_mixtures_2d_prior(n: int, weights: torch.Tensor) -> D.Distribution:
     """
@@ -199,10 +250,15 @@ class GaussianMixtureBase(D.Distribution):
             component_position = np.argwhere(sampled_components == index).squeeze()
             current = self.components[index].rsample(sample_shape=[counts[i],1]).squeeze().float()
             samples[component_position] = current
+        
+        # Make sure samples are stored in a two-dimensional tensor
+        if samples.ndim == 1:
+            samples = samples.reshape((len(samples),-1))
+            
         if return_components:
             label_one_hot = torch.zeros((samples.shape[0], self.ncomponents), dtype=torch.int32)
             for k, label in enumerate(sampled_components):
-                label_one_hot[k, label] = label
+                label_one_hot[k, label] = 1
             return samples.to(self.device), label_one_hot.to(self.device)
         else:
             return samples.to(self.device)
