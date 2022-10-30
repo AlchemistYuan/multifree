@@ -68,6 +68,7 @@ def read_inputs() -> argparse.Namespace:
     parser.add_argument('--samplepng', dest='samplepng', help='Plot the generated samples and save the figure', default='./samples.png')
     parser.add_argument('--paramslog', dest='paramslog', help='A json file to log the model parameters', default='./params.json')
     parser.add_argument('--modelfile', dest='modelfile', help='Save the trained model', default='./model.pt')
+    parser.add_argument('--featureid', dest='featureid', nargs='+', type=int, help='Feature ID to be used in training', default=None)
     args = parser.parse_args()
     return args
 

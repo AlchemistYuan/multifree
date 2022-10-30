@@ -8,16 +8,12 @@ from multifree.utils.loss import *
 
 
 __all__ = [
-    "AAE", "SupervisedAAE", "EnergyGapSAAE", "XYZDihderalAAE", "XYZDihderalSAAE"  
+    "AAE", "SupervisedAAE", "EnergyGapSAAE"  
 ]
 
 class AAE(nn.Module):
     """
-    The adversarial autoencode model
-    
-    Attributes
-    ----------
-    
+    The adversarial autoencoder model
     
     Parameters
     ----------
@@ -214,13 +210,10 @@ class AAE(nn.Module):
         """
         self.generator.eval()
         self.discriminator.eval()
-        val_z_real = torch.ones((len(val_data[0]), 1)).to(self.params['device'])
-        val_z_fake = torch.zeros((len(val_data[0]), 1)).to(self.params['device'])
-        # In case we feed a labeled dataset into the model, we only select the training data but not the labels
-        if isinstance(val_data, list):
-            x_batch = val_data[0].to(self.params['device'])
-        else:
-            x_batch = val_data.to(self.params['device'])
+        val_z_real = torch.ones((len(val_data), 1)).to(self.params['device'])
+        val_z_fake = torch.zeros((len(val_data), 1)).to(self.params['device'])
+        
+        x_batch = val_data.to(self.params['device'])
         if self.whitening:
             x = self.pcawhitening(x_batch)
             assert x.shape[0] == x_batch.shape[0]
@@ -233,10 +226,12 @@ class AAE(nn.Module):
         z = generator_args[0]
         if self.whitening:
             x_rec = self.pcaunwhitening(x_hat)
+        else:
+            x_rec = x_hat
 
         # Compute generator loss
         loss_g_dict = self.criterion_G(x_batch, x_rec, generator_args[1:], self.params['beta'])
-        loss_g = 0.999 * loss_g_dict['loss'] + 0.001 * self.criterion_D(self.discriminator(z), val_z_real)
+        loss_g = 0.99 * loss_g_dict['loss'] + 0.01 * self.criterion_D(self.discriminator(z), val_z_real)
 
         # Train the discriminator
         noise = self.true_prior.sample(sample_shape=torch.tensor([len(z),
@@ -352,7 +347,7 @@ class AAE(nn.Module):
             x_rec = x_hat
         # Compute generator loss
         loss_g_dict = self.criterion_G(x_batch, x_rec, generator_args[1:], self.params['beta'])
-        loss_g = 0.999 * loss_g_dict['loss'] + 0.001 * self.criterion_D(self.discriminator(z), self.z_real)
+        loss_g = 0.99 * loss_g_dict['loss'] + 0.01 * self.criterion_D(self.discriminator(z), self.z_real)
         # Backward pass
         self.optim_G.zero_grad()
         loss_g.backward()
@@ -640,274 +635,3 @@ class EnergyGapSAAE(SupervisedAAE):
         self.optim_D.step()
         return loss_g_dict, loss_d
 
-class XYZDihderalAAE(AAE):
-    """
-    The XYZDihderalAAE model takes xyz coordinates and phi/psi dihedrals as input.
-    The output of this model is the reconstructed xyz coordinates.
-    The generator and discriminator archetectures are the same as the standard AAE model.
-    The difference lies in the input of the generator: a combination of xyz and phi/psi (in sin/cos space).
-    During the traning of the generator, the xyz parts are optionally whitened. 
-    
-    This class is a subclass of the AAE model and parameters are the same as the AAE class.
-    
-    Attributes
-    ----------
-    split : int
-        The number of features to be splitted from the rest features which will be whitened
-    """
-    def __init__(self, params: dict, generator: nn.Module, discriminator: nn.Module, 
-                 optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
-                 PCAWhitening: nn.Module=None, PCAUnWhitening: nn.Module=None, whitened_loss=True,
-                 variational: bool=False, whitening: bool=True, verbose: bool=True) -> None:
-        super(XYZDihderalAAE, self).__init__(params, generator, discriminator, 
-                                             optim_g, optim_d, generator_loss, discriminator_loss, true_prior, 
-                                             PCAWhitening, PCAUnWhitening, whitened_loss,
-                                             variational, whitening, verbose)
-        self.split = self.params['split']
-    
-    def _train_one_step(self, j: int, train_batch) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        A private method to train one step in an epoch.
-        Overriden from the parent class. Parameters and returns are the same as the parent class.
-        
-        Parameters
-        ----------
-        j : int
-            The number of training step in an epoch
-        train_batch : list
-            The minibatch to be trained at this step and the corresponding labels
-            
-        Returns
-        -------
-        loss_g_dict : dict
-            A dictionary to store each component of the generator loss
-        loss_d : torch.Tensor
-            The discriminator loss
-        """
-        if isinstance(train_batch, list):
-            x_batch = train_batch[0].to(self.params['device'])
-        else:
-            x_batch = train_batch.to(self.params['device'])
-        if self.whitening:
-            if self.split <= 0:
-                split = x_batch.shape[1]
-            else:
-                split = x_batch.shape[1] - self.split
-            x = self.pcawhitening(x_batch[:,:split])
-            x_cat = torch.cat((x, x_batch[:,split:]), dim=1)
-            assert x_cat.shape[0] == x_batch.shape[0]
-            assert x_cat.shape[1] == x_batch.shape[1] - self.params['dof']
-        else:
-            x_cat = x_batch
-            split = 0
-            assert x_cat.shape[0] == x_batch.shape[0]
-            assert x_cat.shape[1] == x_batch.shape[1]
-            
-        # Train the generator
-        x_hat, generator_args = self.train_generator(x_cat)
-        z = generator_args[0]
-        if self.whitening:
-            x_rec = self.pcaunwhitening(x_hat)
-        else:
-            x_rec = x_hat
-        # Compute the phi/psi angles from the reconstructed xyz coordinates
-        sincos_phipsi = self.xyz2dihedrals(x_rec, idx=self.params['idx'])
-        # If the reconstruction loss is computed on the whitened data
-        if self.whitened_loss:
-            # Combine the whitened xyz coordinates and the computed phi/psi
-            x_hat_sincos_phipsi = torch.cat((x_hat, sincos_phipsi), dim=1).to(self.params['device'])
-            loss_g_dict = self.criterion_G(x_cat, x_hat_sincos_phipsi, generator_args[1:], 
-                                       self.params['beta'], x_hat.shape[1])
-        else:
-            # Combine the unwhitened xyz coordinates and the computed phi/psi
-            x_rec_sincos_phipsi = torch.cat((x_rec, sincos_phipsi), dim=1).to(self.params['device'])
-            loss_g_dict = self.criterion_G(x_batch, x_rec_sincos_phipsi, generator_args[1:], 
-                                       self.params['beta'], x_rec.shape[1])
-        # Compute generator loss
-        
-        loss_g = 0.999 * loss_g_dict['loss'] + 0.001 * self.criterion_D(self.discriminator(z), self.z_real)
-        # Backward pass
-        self.optim_G.zero_grad()
-        loss_g.backward()
-        self.optim_G.step()
-                
-        # Train the discriminator
-        noise = self.true_prior.sample(sample_shape=torch.tensor([self.params['batchsize'], 
-                                       self.params['latent']])).to(self.params['device'])
-        target_real, target_generator, loss_d = self.train_discriminator(z, noise)
-        # Backward pass
-        self.optim_D.zero_grad()
-        loss_d.backward()
-        self.optim_D.step()
-        return loss_g_dict, loss_d
-    
-    def xyz2dihedrals(self, xyz: torch.Tensor, idx: list=None) -> torch.Tensor:
-        """
-        Compute the phi/psi dihedral angles from the cartesian coordinates.
-        
-        Parameters
-        ----------
-        xyz : torch.Tensor
-            The cartesian coordinates
-        idx : list, default=None
-            The atom indices for the phi and psi angles
-        
-        Returns
-        -------
-        sincos_phipsi : torch.Tensor
-            The phi/psi angles in sin/cos form
-        """
-        xyz_reshaped = xyz.reshape(xyz.shape[0], xyz.shape[1]//3, 3)
-        phi_atoms = xyz_reshaped[:,idx[0],:]
-        psi_atoms = xyz_reshaped[:,idx[1],:]
-        
-        # Get the phi/psi angles in radians
-        phi_angles = self._compute_dihedral(phi_atoms[:,0,:], phi_atoms[:,1,:], phi_atoms[:,2,:], phi_atoms[:,3,:])
-        psi_angles = self._compute_dihedral(psi_atoms[:,0,:], psi_atoms[:,1,:], psi_atoms[:,2,:], psi_atoms[:,3,:])
-        sincos_phipsi = torch.zeros((phi_angles.shape[0], 4), device=self.params['device'])
-        sincos_phipsi[:,0] = torch.sin(phi_angles)
-        sincos_phipsi[:,1] = torch.cos(phi_angles)
-        sincos_phipsi[:,2] = torch.sin(psi_angles)
-        sincos_phipsi[:,3] = torch.cos(psi_angles)
-        return sincos_phipsi
-    
-    def _compute_angle(self, p1, p2) -> torch.Tensor:
-        """
-        This method is based on the code in the following link:
-        https://stackoverflow.com/questions/56918164/use-tensorflow-pytorch-to-speed-up-minimisation-of-a-custom-function
-        """
-        inner_product = (p1*p2).sum(dim=-1)
-        p1_norm = torch.linalg.norm(p1, dim=-1)
-        p2_norm = torch.linalg.norm(p2, dim=-1)
-        cos = inner_product / (p1_norm * p2_norm)
-        cos = torch.clamp(cos, -0.99999, 0.99999)
-        angle = torch.acos(cos)
-        return angle
-    
-    def _compute_dihedral(self, v1, v2, v3, v4) -> torch.Tensor:
-        """
-        This method is based on the code in the following link:
-        https://stackoverflow.com/questions/56918164/use-tensorflow-pytorch-to-speed-up-minimisation-of-a-custom-function
-        """
-        ab = v1 - v2
-        cb = v3 - v2
-        db = v4 - v3
-        u = torch.linalg.cross(ab, cb, dim=-1)
-        v = torch.linalg.cross(db, cb, dim=-1)
-        w = torch.linalg.cross(u, v, dim=-1)
-        angle = self._compute_angle(u, v)
-        angle = torch.where(self._compute_angle(cb, w) > 1, -angle, angle)
-        return angle
-
-class XYZDihderalSAAE(XYZDihderalAAE):
-    """
-    The supervised XYZDihderalAAE model.
-    """
-    def __init__(self, params: dict, generator: nn.Module, discriminator: nn.Module, 
-                 optim_g, optim_d, generator_loss, discriminator_loss, true_prior,
-                 PCAWhitening: nn.Module=None, PCAUnWhitening: nn.Module=None, whitened_loss=True,
-                 variational: bool=False, whitening: bool=True, verbose: bool=True) -> None:
-        super(XYZDihderalSAAE, self).__init__(params, generator, discriminator, 
-                                               optim_g, optim_d, generator_loss, discriminator_loss, true_prior, 
-                                               PCAWhitening, PCAUnWhitening, whitened_loss,
-                                               variational, whitening, verbose)
-        self.split = self.params['split']
-    
-    def _label_to_one_hot_vector(self, labels: torch.Tensor) -> torch.Tensor:
-        """
-        Turn the label tensor to tensor of one-hot vector.
-        
-        Parameters
-        labels : torch.Tensor
-            The label tensor. The elements should be within [0,nclass-1]
-            
-        Returns
-        -------
-        labels_one_hot : torch.Tensor
-            The tensor of one-hot vector with the shape of (batch_size, nclass)
-        """
-        labels_one_hot = torch.zeros((self.params['batchsize'], self.params['nclass']), dtype=torch.int32)
-        for k, label in enumerate(labels):
-            label = label.int()
-            labels_one_hot[k, label] = label
-        return labels_one_hot
-    
-    def _train_one_step(self, j: int, train_batch) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        A private method to train one step in an epoch.
-        Overriden from the parent class. Parameters and returns are the same as the parent class.
-        
-        Parameters
-        ----------
-        j : int
-            The number of training step in an epoch
-        train_batch : list
-            The minibatch to be trained at this step and the corresponding labels
-            
-        Returns
-        -------
-        loss_g_dict : dict
-            A dictionary to store each component of the generator loss
-        loss_d : torch.Tensor
-            The discriminator loss
-        """
-        x_batch = train_batch[0].to(self.params['device'])
-        label_batch = train_batch[1].to(self.params['device'])
-        labels_one_hot = self._label_to_one_hot_vector(label_batch).to(self.params['device'])
-        
-        if self.whitening:
-            if self.split <= 0:
-                split = x_batch.shape[1]
-            else:
-                split = x_batch.shape[1] - self.split
-            x = self.pcawhitening(x_batch[:,:split])
-            x_cat = torch.cat((x, x_batch[:,split:]), dim=1)
-            assert x_cat.shape[0] == x_batch.shape[0]
-            assert x_cat.shape[1] == x_batch.shape[1] - self.params['dof']
-        else:
-            x_cat = x_batch
-            split = 0
-            assert x_cat.shape[0] == x_batch.shape[0]
-            assert x_cat.shape[1] == x_batch.shape[1]
-            
-        # Train the generator
-        x_hat, generator_args = self.train_generator(x_cat)
-        z = generator_args[0]
-        z_label_batch = torch.cat((z, labels_one_hot), dim=1)
-        
-        if self.whitening:
-            x_rec = self.pcaunwhitening(x_hat)
-        else:
-            x_rec = x_hat
-        # Compute the phi/psi angles from the reconstructed xyz coordinates
-        sincos_phipsi = self.xyz2dihedrals(x_rec, idx=self.params['idx'])
-        # If the reconstruction loss is computed on the whitened data
-        if self.whitened_loss:
-            # Combine the whitened xyz coordinates and the computed phi/psi
-            x_hat_sincos_phipsi = torch.cat((x_hat, sincos_phipsi), dim=1).to(self.params['device'])
-            loss_g_dict = self.criterion_G(x_cat, x_hat_sincos_phipsi, generator_args[1:], 
-                                       self.params['beta'], x_hat.shape[1])
-        else:
-            # Combine the unwhitened xyz coordinates and the computed phi/psi
-            x_rec_sincos_phipsi = torch.cat((x_rec, sincos_phipsi), dim=1).to(self.params['device'])
-            loss_g_dict = self.criterion_G(x_batch, x_rec_sincos_phipsi, generator_args[1:], 
-                                       self.params['beta'], x_rec.shape[1])
-        # Compute generator loss
-        
-        loss_g = 0.999 * loss_g_dict['loss'] + 0.001 * self.criterion_D(self.discriminator(z_label_batch), self.z_real)
-        # Backward pass
-        self.optim_G.zero_grad()
-        loss_g.backward()
-        self.optim_G.step()
-                
-        # Train the discriminator
-        noise, noise_one_hot_label = self.true_prior.sample(sample_shape=torch.tensor([self.params['batchsize'], 
-                                                            self.params['latent']]), 
-                                                            return_components=True)
-        noise_label_batch = torch.cat((noise, noise_one_hot_label), dim=1)
-        target_real, target_generator, loss_d = self.train_discriminator(z_label_batch, noise_label_batch)
-        # Backward pass
-        self.optim_D.zero_grad()
-        loss_d.backward()
-        self.optim_D.step()
-        return loss_g_dict, loss_d

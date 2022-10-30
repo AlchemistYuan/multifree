@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 
 
 __all__ = [
-   "PCAWhitening", "kmeans_scikit", "pca", "minmaxscaler" 
+   "PCAWhitening", "kmeans_scikit", "pca", "minmaxscaler", "xyz2dihedrals" 
 ]
 
 
@@ -47,7 +47,7 @@ def kmeans_scikit(data: np.array, k: int=5, batch_size: int=0) -> tuple[np.ndarr
 
 def pca(x, keepdims: int=6) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    This function implements principal component analysis in scikit-learn.
+    This function performs principal component analysis using scikit-learn.
     
     Parameters
     ----------
@@ -151,3 +151,81 @@ class PCAWhitening(nn.Module):
             else:
                 x_transformed = x_transformed_unscaled
         return x_transformed
+
+def xyz2dihedrals(xyz: torch.Tensor, idx: list=None) -> torch.Tensor:
+    """
+    Compute the phi/psi dihedral angles from the cartesian coordinates.
+    
+    Parameters
+    ----------
+    xyz : torch.Tensor
+        The cartesian coordinates
+    idx : list, default=None
+        The atom indices for the phi and psi angles
+    
+    Returns
+    -------
+    sincos_phipsi : torch.Tensor
+        The phi/psi angles in sin/cos form
+    """
+    xyz_reshaped = xyz.reshape(xyz.shape[0], xyz.shape[1]//3, 3)
+    phi_atoms = xyz_reshaped[:,idx[0],:]
+    psi_atoms = xyz_reshaped[:,idx[1],:]
+
+    # Get the phi/psi angles in radians
+    phi_angles = _compute_dihedral(phi_atoms[:,0,:], phi_atoms[:,1,:], phi_atoms[:,2,:], phi_atoms[:,3,:])
+    psi_angles = _compute_dihedral(psi_atoms[:,0,:], psi_atoms[:,1,:], psi_atoms[:,2,:], psi_atoms[:,3,:])
+    sincos_phipsi = torch.zeros((phi_angles.shape[0], 4), device=self.params['device'])
+    sincos_phipsi[:,0] = torch.sin(phi_angles)
+    sincos_phipsi[:,1] = torch.cos(phi_angles)
+    sincos_phipsi[:,2] = torch.sin(psi_angles)
+    sincos_phipsi[:,3] = torch.cos(psi_angles)
+    return sincos_phipsi
+
+def _compute_angle(p1: torch.Tensor, p2: torch.Tensor) -> torch.Tensor:
+    """
+    This method is based on the code in the following link:
+    https://stackoverflow.com/questions/56918164/use-tensorflow-pytorch-to-speed-up-minimisation-of-a-custom-function
+    
+    Parameters
+    ----------
+    p1, p2 : torch.Tensor
+        Two vectors which represent two line
+    
+    Returns
+    -------
+    angle : torch.Tensor
+        The angle formed by the two lines
+    """
+    inner_product = (p1*p2).sum(dim=-1)
+    p1_norm = torch.linalg.norm(p1, dim=-1)
+    p2_norm = torch.linalg.norm(p2, dim=-1)
+    cos = inner_product / (p1_norm * p2_norm)
+    cos = torch.clamp(cos, -0.99999, 0.99999)
+    angle = torch.acos(cos)
+    return angle
+
+def _compute_dihedral(v1: torch.Tensor, v2: torch.Tensor, v3: torch.Tensor, v4: torch.Tensor) -> torch.Tensor:
+    """
+    This method is based on the code in the following link:
+    https://stackoverflow.com/questions/56918164/use-tensorflow-pytorch-to-speed-up-minimisation-of-a-custom-function
+    
+    Parameters
+    ----------
+    v1, v2, v3, v4 : torch.Tensor
+        cartesian coordinates of four atoms
+
+    Returns
+    -------
+    angle : torch.Tensor
+        The dihedral angle defined by the four atoms
+    """
+    ab = v1 - v2
+    cb = v3 - v2
+    db = v4 - v3
+    u = torch.linalg.cross(ab, cb, dim=-1)
+    v = torch.linalg.cross(db, cb, dim=-1)
+    w = torch.linalg.cross(u, v, dim=-1)
+    angle = self._compute_angle(u, v)
+    angle = torch.where(self._compute_angle(cb, w) > 1, -angle, angle)
+    return angle
