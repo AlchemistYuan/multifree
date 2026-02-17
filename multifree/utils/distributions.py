@@ -70,7 +70,7 @@ def histogram_2d(data_x: np.ndarray, data_y: np.ndarray,
     y = (yedges[:-1] + yedges[1:]) / 2
     return hist, x, y
 
-def create_gaussian_mixtures_prior(ndim: int, n: int, weights: torch.Tensor) -> D.Distribution:
+def create_gaussian_mixtures_prior(ndim: int, n: int, weights: torch.Tensor, device: str = 'cuda') -> D.Distribution:
     """
     Create a mixture of gaussian distributions as the prior distribution.
     
@@ -89,14 +89,14 @@ def create_gaussian_mixtures_prior(ndim: int, n: int, weights: torch.Tensor) -> 
         The created mixture distributions
     """
     if ndim == 1:
-        p = create_gaussian_mixtures_1d_prior(n, weights) 
+        p = create_gaussian_mixtures_1d_prior(n, weights, device=device)
     elif ndim == 2:
-        p = create_gaussian_mixtures_2d_prior(n, weights) 
+        p = create_gaussian_mixtures_2d_prior(n, weights, device=device)
     else:
         raise ValueError('Only 1D or 2D Gaussian mixture is supported now.')
     return p
 
-def create_gaussian_mixtures_1d_prior(n: int, weights: torch.Tensor) -> D.Distribution:
+def create_gaussian_mixtures_1d_prior(n: int, weights: torch.Tensor, device: str = 'cuda') -> D.Distribution:
     """
     Create a 1d mixture of gaussian distributions as the prior distribution.
     
@@ -118,10 +118,10 @@ def create_gaussian_mixtures_1d_prior(n: int, weights: torch.Tensor) -> D.Distri
     for l in range(n):
         mean = 5 * np.cos((l*2*np.pi)/n)
         locations[l] = mean
-    p = GaussianMixture1D(locations, std, weights=weights)
+    p = GaussianMixture1D(locations, std, weights=weights, device=device)
     return p
 
-def create_gaussian_mixtures_2d_prior(n: int, weights: torch.Tensor) -> D.Distribution:
+def create_gaussian_mixtures_2d_prior(n: int, weights: torch.Tensor, device: str = 'cuda') -> D.Distribution:
     """
     Create a 2d mixture of gaussian distributions as the prior distribution.
     
@@ -151,7 +151,7 @@ def create_gaussian_mixtures_2d_prior(n: int, weights: torch.Tensor) -> D.Distri
         #S = np.array([[a1, 0], [0, a2]])
         #cov = torch.tensor(np.dot(np.dot(M, S), np.linalg.inv(M)))
         std[l,:,:] = torch.eye(2) * 5 #cov
-    p = GaussianMixture2D(locations, std, weights=weights)
+    p = GaussianMixture2D(locations, std, weights=weights, device=device)
     return p
 
 class GaussianMixtureBase(D.Distribution):
@@ -169,7 +169,7 @@ class GaussianMixtureBase(D.Distribution):
     device : str, default='cuda'
         The selected device
     """
-    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor, device: str='cuda') -> None:
+    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor, device: str = 'cuda') -> None:
         self.ncomponents = int(means.shape[0])
         self.device = device
         if weights is None:
@@ -293,8 +293,8 @@ class GaussianMixture1D(GaussianMixtureBase):
     The mixture of one-dimensional gaussian distributions.
     This class is a subclass of the GaussianMixtureBase class and parameters are the same as GaussianMixtureBase.
     """
-    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor=None) -> None:
-        super(GaussianMixture1D, self).__init__(means, std, weights)
+    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor = None, device: str = 'cuda') -> None:
+        super(GaussianMixture1D, self).__init__(means, std, weights, device)
         self.ndim = 1
      
     def _prepare_components(self, means: torch.Tensor, std: torch.Tensor) -> list:
@@ -309,8 +309,8 @@ class GaussianMixture2D(GaussianMixtureBase):
     The mixture of two-dimensional gaussian distributions.
     This class is a subclass of the GaussianMixtureBase class and parameters are the same as GaussianMixtureBase.
     """
-    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor=None) -> None:
-        super(GaussianMixture2D, self).__init__(means, std, weights)
+    def __init__(self, means: torch.Tensor, std: torch.Tensor, weights: torch.Tensor = None, device: str = 'cuda') -> None:
+        super(GaussianMixture2D, self).__init__(means, std, weights, device)
         self.ndim = 2
  
     def _prepare_components(self, means: torch.Tensor, std: torch.Tensor) -> list:
@@ -326,7 +326,7 @@ class DoubleWellPotential(D.MixtureSameFamily):
     """
 
     def __init__(self, mean: torch.Tensor, std: torch.Tensor, 
-                 f: int=3, weight: torch.Tensor=torch.tensor([0.5, 0.5])):
+                 f: int = 3, weight: torch.Tensor = torch.tensor([0.5, 0.5])):
         mix = D.Categorical(weight)
         comp = D.MultivariateNormal(mean, covariance_matrix=std)
         super().__init__(mix, comp)
