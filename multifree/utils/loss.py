@@ -148,12 +148,12 @@ class AutoencoderLoss(nn.Module):
     
 class XYZDihderalAAEGeneratorLoss(nn.Module):
     def __init__(self, split: int=4, recon_loss_cartesian: str='mse', recon_loss_dihedral: str='mse', 
-                 kl: bool=False, device: str='cuda:0') -> torch.tensor:
+                 kl: bool=False, device: str='cuda:0'):
         super(XYZDihderalAAEGeneratorLoss, self).__init__()
-        self.cartensian_loss_fn = AutoencoderLoss(recon_loss_fn=recon_loss_cartesian, 
+        self.cartensian_loss_fn = AutoencoderLoss(loss_fn=recon_loss_cartesian,
                                                   kl=kl).to(device)
-        self.dihedral_loss_fn = AutoencoderLoss(recon_loss_fn=recon_loss_dihedral, 
-                                                  kl=kl).to(device)
+        self.dihedral_loss_fn = AutoencoderLoss(loss_fn=recon_loss_dihedral,
+                                                kl=kl).to(device)
         self.split = split
         
     def forward(self, x: torch.tensor, x_hat: torch.tensor, *args) -> list:
