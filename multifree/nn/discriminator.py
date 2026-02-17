@@ -27,8 +27,8 @@ class Discriminator(nn.Module):
     activation : str, default='relu'
         The activation function
     """
-    def __init__(self, in_features: int=2, discriminator_hidden_dims: list=[128,128], 
-                 activation='relu',) -> None:
+    def __init__(self, in_features: int = 2, discriminator_hidden_dims: list = [128,128],
+                 activation: str = 'relu') -> None:
         super(Discriminator, self).__init__()
         modules = []
         if activation == 'relu':
@@ -41,7 +41,7 @@ class Discriminator(nn.Module):
             self.activation = nn.Sigmoid()
         else:
             raise ValueError('Activation function must be relu, leakyrelu, tanh, or sigmoid.')
-            
+
         for i in range(len(discriminator_hidden_dims)):
             modules.append(nn.Sequential(nn.Linear(in_features, discriminator_hidden_dims[i]),
                                          self.activation))
