@@ -89,7 +89,7 @@ def default_params() -> dict:
                     'outfeatures': None, 'hidden': [64,32], 'nepoch': 20,
                     'batchsize': 100, 'dof': 6, 'beta': 1.0, 'lrg': 0.00025, 'lrd': 0.0001, 
                     'nclass': 4, 'device': 'cuda:0', 'idx': None, 'split': 4,
-                    'dischidden': [32,16], 'disclatent': 6, 
+                    'dischidden': [32,16], 'disclatent': 6,
                     'decoderfinal': 'linear', 'batchnorm': False}
     return model_params
  
@@ -117,15 +117,24 @@ def generate_grid(xmin=-1, xmax=1, ymin=-1, ymax=1, steps=1000):
     Z = grid.reshape((-1, 2))
     return Z    
 
-def train_val_split(dataset: data.Dataset, val_splitting: float=0.1) -> list:
+def train_val_split(dataset: data.Dataset, val_splitting: float=0.1,
+                    test_splitting: float=None) -> list:
     """
     Take a dataset and split it into training and validation sets.
     """
     n = len(dataset)  # how many total elements you have
     n_val = int(n * val_splitting)  # number of test/val elements
-    n_train = n - n_val
-    train_set, val_set = data.random_split(dataset, (n_train, n_val))
-    return [train_set, val_set]
+    if test_splitting is not None:
+        n_test = int(n * test_splitting)
+    else:
+        n_test = 0
+    n_train = n - n_val - n_test
+    if test_splitting is not None:
+        train_set, val_set, test_set = data.random_split(dataset, (n_train, n_val, n_test))
+        return [train_set, val_set, test_set]
+    else:
+        train_set, val_set = data.random_split(dataset, (n_train, n_val))
+        return [train_set, val_set]
 
 def autoencoder2conformations(models: list, u: mda.Universe, atoms: str='all', z=None,
                               outname: str='output.pdb', whitening: bool=True, nsample: int=1000) -> None:
