@@ -1,8 +1,5 @@
 multifree
 ==============================
-[//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/AlchemistYuan/multifree/workflows/CI/badge.svg)](https://github.com/AlchemistYuan/multifree/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/AlchemistYuan/multifree/branch/master/graph/badge.svg)](https://codecov.io/gh/AlchemistYuan/multifree/branch/master)
 
 *The documentation is under construction*
 
@@ -25,7 +22,7 @@ With the optimal latent space, I then coupled it with the enhanced sampling biom
 
 ### Copyright
 
-Copyright (c) 2022, Yuchen Yuan
+Copyright (c) 2026, Yuchen Yuan
 
 
 #### Acknowledgements
